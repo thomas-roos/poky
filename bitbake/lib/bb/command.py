@@ -60,6 +60,7 @@ class Command:
         self.process_server = process_server
         # Access with locking using process_server.{get/set/clear}_async_cmd()
         self.currentAsyncCommand = None
+        self.lastEvent = None
 
     def runCommand(self, commandline, process_server, ro_only=False):
         command = commandline.pop(0)
@@ -145,11 +146,13 @@ class Command:
 
     def finishAsyncCommand(self, msg=None, code=None):
         if msg or msg == "":
-            bb.event.fire(CommandFailed(msg), self.cooker.data)
+            event = CommandFailed(msg)
         elif code:
-            bb.event.fire(CommandExit(code), self.cooker.data)
+            event = CommandExit(code)
         else:
-            bb.event.fire(CommandCompleted(), self.cooker.data)
+            event = CommandCompleted()
+        bb.event.fire(event, self.cooker.data)
+        self.lastEvent = event
         self.cooker.finishcommand()
         self.process_server.clear_async_cmd()
 

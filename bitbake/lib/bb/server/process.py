@@ -115,7 +115,8 @@ class ProcessServer():
         assert hasattr(function, '__call__')
         with bb.utils.lock_timeout(self._idlefuncsLock):
             self._idlefuns[function] = data
-        serverlog("Registering idle function %s" % str(function))
+            handlers = len(self._idlefuns)
+        serverlog("Registering idle function %s (%s handlers)" % (str(function), str(handlers)))
 
     def run(self):
 
@@ -401,6 +402,7 @@ class ProcessServer():
                 del self._idlefuns[function]
                 self.idle_cond.notify_all()
 
+        lastdebug = time.time()
         while not self.quit:
             nextsleep = 0.1
             fds = []
@@ -414,7 +416,7 @@ class ProcessServer():
                 try:
                     retval = function(self, data, False)
                     if isinstance(retval, idleFinish):
-                        serverlog("Removing idle function %s at idleFinish" % str(function))
+                        serverlog("Removing idle function %s at idleFinish (%s)" % (str(function), str(retval.msg)))
                         remove_idle_func(function)
                         self.cooker.command.finishAsyncCommand(retval.msg)
                         nextsleep = None
@@ -461,6 +463,12 @@ class ProcessServer():
                 # Shorten timeout so that we we wake up in time for
                 # the heartbeat.
                 nextsleep = self.next_heartbeat - now
+
+            if time.time() > (lastdebug + 60):
+                lastdebug = time.time()
+                with bb.utils.lock_timeout(self._idlefuncsLock):
+                    num_funcs = len(self._idlefuns)
+                serverlog("Current command %s, idle functions %s, last exit event %s, state %s" % (self.get_async_cmd(), num_funcs, self.cooker.command.lastEvent, self.cooker.state))
 
             if nextsleep is not None:
                 select.select(fds,[],[],nextsleep)[0]
